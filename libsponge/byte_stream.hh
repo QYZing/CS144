@@ -16,8 +16,12 @@
 class ByteStream {
   private:
     // Your code here -- add private members as necessary.
-
-    bool _error{};  //!< Flag indicating that the stream suffered an error.
+    size_t _capacity; 
+    std::deque<char> _data {};
+    size_t _bytes_Wrlen = 0 ;
+    size_t _bytes_Poplen = 0;
+    bool _input_signal = false;
+    bool _error = false;  //!< Flag indicating that the stream suffered an error.
 
   public:
     //! Construct a stream with room for `capacity` bytes.
@@ -36,7 +40,7 @@ class ByteStream {
 
     //! Signal that the byte stream has reached its ending
     void end_input();
-
+    void init_input();
     //! Indicate that the stream suffered an error.
     void set_error() { _error = true; }
     //!@}
