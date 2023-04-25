@@ -5,17 +5,24 @@
 
 #include <cstdint>
 #include <string>
-
+#include <vector>
 //! \brief A class that assembles a series of excerpts from a byte stream (possibly out of order,
 //! possibly overlapping) into an in-order byte stream.
 class StreamReassembler {
-  private:
-    // Your code here -- add private members as necessary.
-
+  private: 
     ByteStream _output;  //!< The reassembled in-order byte stream
-    size_t _capacity;    //!< The maximum number of bytes
+    size_t _capacity ;    //!< The maximum number of bytes
+    // Your code here -- add private members as necessary.
+    std::vector<char> _assembles {} ; //******???????? assembles string by index  if ok -> _output
+    std::vector<bool> _set{}; // ture or false exist
+    size_t _now_index {}; // assembled bytes index
+    size_t _now_assem_byteix {}; //alreday write _output index
+    size_t _end_index ;  // eof index 
+    size_t _sum_bytes {};
+
 
   public:
+    void clear();
     //! \brief Construct a `StreamReassembler` that will store up to `capacity` bytes.
     //! \note This capacity limits both the bytes that have been reassembled,
     //! and those that have not yet been reassembled.
@@ -29,7 +36,7 @@ class StreamReassembler {
     //! will be disregarded.
     //!
     //! \param data the string being added
-    //! \param index the index of the first byte in `data`
+    //! \param index the index of the first byte in `data`¼
     //! \param eof whether or not this segment ends with the end of the stream
     void push_substring(const std::string &data, const uint64_t index, const bool eof);
 
