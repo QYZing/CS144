@@ -49,8 +49,6 @@ int main() {
 
             auto result = read(buf);
             if (buf.stream_out().bytes_written() != offset) {  // read bytes
-                cout<<" buf size " <<buf.stream_out().bytes_written()<<endl;
-                cout<<"offset = " <<offset<<endl;
                 throw runtime_error("test 1 - number of bytes RX is incorrect");
             }
             if (!equal(result.cbegin(), result.cend(), d.cbegin())) {

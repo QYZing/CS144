@@ -29,16 +29,15 @@ StreamReassembler::StreamReassembler(const size_t capacity) :
 //! possibly out-of-order, from the logical stream, and assembles any newly
 //! contiguous substrings and writes them into the output stream in order.
 void StreamReassembler::push_substring(const string &data, const size_t index, const bool eof) {
-    size_t start = index;
     size_t end = data.size() + index;
+    size_t start = index >  _now_index ? index : _now_index;
     if(end > _capacity) end = _capacity;
-    cout<<start<<" "<<end<<endl;
     for(size_t i = start ; i < end ; i++)
     {
         if(_set[i] == 0)
         {
             _set[i] = 1;
-            _assembles[i] = data[i - start];
+            _assembles[i] = data[i - index];
             ++_sum_bytes;
         }
         if(_now_index == i)
@@ -69,8 +68,3 @@ size_t StreamReassembler::unassembled_bytes() const {
 }
 
 bool StreamReassembler::empty() const { return unassembled_bytes() == 0; }
-
-void StreamReassembler::clear() {
-
-    //  _output.pop_output(_output.buffer_size());
-}

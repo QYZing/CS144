@@ -19,10 +19,7 @@ class StreamReassembler {
     size_t _now_assem_byteix {}; //alreday write _output index
     size_t _end_index ;  // eof index 
     size_t _sum_bytes {};
-
-
   public:
-    void clear();
     //! \brief Construct a `StreamReassembler` that will store up to `capacity` bytes.
     //! \note This capacity limits both the bytes that have been reassembled,
     //! and those that have not yet been reassembled.
