@@ -159,7 +159,7 @@ StreamReassembler::StreamReassembler(const size_t capacity) :
 //! contiguous substrings and writes them into the output stream in order.
 void StreamReassembler::push_substring(const string &data, const size_t index, const bool eof) {
     size_t end = data.size() + index;
-    //稍微优化一点，对比其他人用set， priority_queue实现，感觉时间复杂度都还可以
+    //稍微优化一点，对比其他人用set， priority_queue实现，感觉性能都还可以
     size_t start = index >  _now_index ? index : _now_index;
     if(end > _capacity) end = _capacity;
     for(size_t i = start ; i < end ; i++)
