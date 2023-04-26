@@ -1,3 +1,14 @@
+<<<<<<< HEAD
+*.a
+*.o
+/build
+CMakeCache.txt
+CMakeFiles
+Makefile
+cmake_install.cmake
+CTestTestfile.cmake
+compile_commands.json
+=======
 # Prerequisites
 *.d
 
@@ -30,3 +41,4 @@
 *.exe
 *.out
 *.app
+>>>>>>> 2d7953ebe1acb0599821e52d7f5b02f54d829419

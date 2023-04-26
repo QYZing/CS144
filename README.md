@@ -160,8 +160,14 @@ void StreamReassembler::push_substring(const string &data, const size_t index, c
 {
     size_t offset = _full_flag * _capacity;
     size_t end = data.size() + index;
+<<<<<<< HEAD
     size_t start = index >  _now_index + offset ? index : _now_index + offset;
     if(end  - offset > _capacity) end = _capacity + offset;
+=======
+    //稍微优化一点，对比其他人用set， priority_queue实现，感觉性能还可以
+    size_t start = index >  _now_index ? index : _now_index;
+    if(end > _capacity) end = _capacity;
+>>>>>>> 6e6b16e2d896ebcac2982e1438baa68975a04746
     for(size_t i = start ; i < end ; i++)
     {
         size_t ci = i % (_capacity);
@@ -225,3 +231,4 @@ bool StreamReassembler::empty() const { return unassembled_bytes() == 0; }
 
 
 
+>>>>>>> 2d7953ebe1acb0599821e52d7f5b02f54d829419
