@@ -11,7 +11,7 @@
 class StreamReassembler {
   private: 
     ByteStream _output;  //!< The reassembled in-order byte stream
-    size_t _capacity ;    //!< The maximum number of bytes
+    size_t _capacity ;      //!< The maximum number of bytes
     // Your code here -- add private members as necessary.
     std::vector<char> _assembles {} ; //******???????? assembles string by index  if ok -> _output
     std::vector<bool> _set{}; // ture or false exist
