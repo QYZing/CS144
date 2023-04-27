@@ -19,17 +19,21 @@ class TCPReceiver {
 
     //! The maximum number of bytes we'll store.
     size_t _capacity;
-
+    uint64_t _isn{0};
+    int32_t _start_flag {};
+    bool _eof{};
+    int _null_offset {};
   public:
     //! \brief Construct a TCP receiver
     //!
     //! \param capacity the maximum number of bytes that the receiver will
     //!                 store in its buffers at any give time.
-    TCPReceiver(const size_t capacity) : _reassembler(capacity), _capacity(capacity) {}
+    TCPReceiver(const size_t capacity)
+     : _reassembler(capacity), _capacity(capacity) {}
 
     //! \name Accessors to provide feedback to the remote TCPSender
     //!@{
-
+ 
     //! \brief The ackno that should be sent to the peer
     //! \returns empty if no SYN has been received
     //!

@@ -17,8 +17,9 @@ class StreamReassembler {
     std::vector<bool> _set{}; // ture or false exist
     size_t _now_index {}; // assembled bytes index
     size_t _now_assem_byteix {}; //alreday write _output index
-    size_t _end_index ;  // eof index 
+    size_t _end_index =  -1;  // eof index 
     size_t _sum_bytes {};
+    int _full_flag {}; // 当容器满了但是还eof还没到++
   public:
     //! \brief Construct a `StreamReassembler` that will store up to `capacity` bytes.
     //! \note This capacity limits both the bytes that have been reassembled,
@@ -52,6 +53,11 @@ class StreamReassembler {
     //! \brief Is the internal state empty (other than the output stream)?
     //! \returns `true` if no substrings are waiting to be assembled
     bool empty() const;
+
+    // add residue windows
+    size_t residue() const;
+
+    uint64_t headno() const ;
 };
 
 #endif  // SPONGE_LIBSPONGE_STREAM_REASSEMBLER_HH
