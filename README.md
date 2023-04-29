@@ -313,6 +313,196 @@ size_t TCPReceiver::window_size() const //virtual size
 
 ```
 
+## lab3
+
+这节调试了好久，被迫学会vscode gdb 调试代码 由于英文水平问题理解了半天才知道他给的接口的调用方式
+
+本实验要求实现一个TCPSender 
+
+1 开始系统调用构造函数并调用fill_window（） syn不能携带数据
+
+2 当接收ACK超过_next_seqno 丢弃并返回false 或者小于已确认seq返回true 其他自行处理
+
+3 超时一次 超时时长会乘2 （实行网络拥塞控制）
+
+4 定时器启动时机（参考 自顶向下 的图3-33）
+
+5 采取累计确认方式通过维护缓存队列重传
+
+###### tcp_sender.hh
+
+```c++
+ private:
+    //! our initial sequence number, the number for our SYN.
+    WrappingInt32 _isn;
+  
+    //! outbound queue of segments that the TCPSender wants sent
+    std::queue<TCPSegment> _segments_out{};
+    std::queue<TCPSegment> _now_tmp_data{}; // unconfirmed
+    size_t _bytes_in_flight{};
+    //! retransmission timer for the connection
+    unsigned int _initial_retransmission_timeout;
+    bool _tick_flag {};
+    uint64_t _now_timer {};
+    unsigned int _retransmission_count{};
+    unsigned int _retransmission_timeout{};
+    //! outgoing stream of bytes that have not yet been sent
+    ByteStream _stream;
+
+    //! the (absolute) sequence number for the next byte to be sent
+    uint64_t _next_seqno{0};
+    uint64_t _recv_seq {0};
+    uint16_t _receiver_window_size {0};
+    bool _syn_flag {};
+    bool _fin_flag {};
+ public:
+	....
+    void loading_data( TCPSegment & t);
+```
+
+###### tcp_sender
+
+```c++
+TCPSender::TCPSender(const size_t capacity, const uint16_t retx_timeout, const std::optional<WrappingInt32> fixed_isn)
+    : _isn(fixed_isn.value_or(WrappingInt32{random_device()()}))
+    , _initial_retransmission_timeout{retx_timeout}
+    , _stream(capacity) {}
+
+uint64_t TCPSender::bytes_in_flight() const { return _bytes_in_flight; }
+
+void TCPSender::fill_window() {
+    TCPSegment t;
+    if(!_syn_flag)
+    {
+        t.header().syn = true;
+        loading_data(t); 
+        _syn_flag = true;
+        return ;
+    }
+    else 
+    {
+        loading_data(t);  
+    }
+}
+
+//! \param ackno The remote receiver's ackno (acknowledgment number)
+//! \param window_size The remote receiver's advertised window size
+//! \returns `false` if the ackno appears invalid (acknowledges something the TCPSender hasn't sent yet)
+bool TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_size) 
+{    
+    uint64_t dackno = unwrap(ackno , _isn , _recv_seq);
+    if( dackno > _next_seqno )
+    {
+        return false;
+    }
+    else if(dackno < _recv_seq) 
+    {
+        return true;
+    }  
+    _receiver_window_size = window_size;
+    while(dackno > _recv_seq)
+    {
+        _recv_seq += _now_tmp_data.front().length_in_sequence_space();
+        _bytes_in_flight -= _now_tmp_data.front().length_in_sequence_space();
+        _now_tmp_data.pop();
+        _retransmission_timeout = _initial_retransmission_timeout;
+        _retransmission_count = 0;
+    }
+    if(_now_tmp_data.size()) 
+    {
+        _tick_flag = 1;
+        _now_timer = 0;
+    }
+    fill_window();
+    return true;
+}
+
+//! \param[in] ms_since_last_tick the number of milliseconds since the last call to this method
+void TCPSender::tick(const size_t ms_since_last_tick)
+{
+    if(!_tick_flag)
+    {  
+         _now_timer = 0;
+        return ;
+    }
+    _now_timer += ms_since_last_tick;
+    if(_now_timer >= _retransmission_timeout &&  _now_tmp_data.size())
+    {
+        _segments_out.push(_now_tmp_data.front());
+        _retransmission_count ++;
+        _retransmission_timeout *= 2;
+        _now_timer = 0;
+        _tick_flag = 1;
+    }
+}
+
+unsigned int TCPSender::consecutive_retransmissions() const { return _retransmission_count; }
+
+void TCPSender::send_empty_segment()//only emtpy seqno
+{
+    TCPSegment t ;
+    t.header().seqno = wrap(_next_seqno ,_isn);;
+    _segments_out.push(t);
+}
+
+void TCPSender::loading_data(TCPSegment & t )
+{
+    if(_fin_flag ) return ;
+    t.header().seqno = wrap(_next_seqno ,_isn); 
+    string data ="";
+    if(_syn_flag )
+    {
+        if(_stream.buffer_empty() && !_stream.eof() ) return;
+        size_t size = _receiver_window_size == 0 ? 1 :_receiver_window_size;
+        size = size - _bytes_in_flight;
+        if(size <  1 )  return ;// dont have data size 
+        if(_stream.buffer_size())
+        {
+            data = _stream.peek_output(size);
+            _stream.pop_output(data.size()); 
+            size  = size - data.size();
+            t.payload() = Buffer(move(data));  
+        }
+        if(_stream.eof() &&  size)
+        {
+            t.header().fin = 1;
+            _fin_flag = 1;
+        }
+    }
+    _bytes_in_flight += t.length_in_sequence_space();    
+    _next_seqno += t.length_in_sequence_space();
+    _now_tmp_data.push(t);
+    _segments_out.push(t);
+
+    if(!_tick_flag)
+    {
+        _retransmission_timeout = _initial_retransmission_timeout;
+        _tick_flag = 1;
+        _now_timer = 0;
+    }
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
