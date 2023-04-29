@@ -19,25 +19,32 @@ class TCPSender {
   private:
     //! our initial sequence number, the number for our SYN.
     WrappingInt32 _isn;
-
+  
     //! outbound queue of segments that the TCPSender wants sent
     std::queue<TCPSegment> _segments_out{};
-
+    std::queue<TCPSegment> _now_tmp_data{}; // unconfirmed
+    size_t _bytes_in_flight{};
     //! retransmission timer for the connection
     unsigned int _initial_retransmission_timeout;
-
+    bool _tick_flag {};
+    uint64_t _now_timer {};
+    unsigned int _retransmission_count{};
+    unsigned int _retransmission_timeout{};
     //! outgoing stream of bytes that have not yet been sent
     ByteStream _stream;
 
     //! the (absolute) sequence number for the next byte to be sent
     uint64_t _next_seqno{0};
-
+    uint64_t _recv_seq {0};
+    uint16_t _receiver_window_size {0};
+    bool _syn_flag {};
+    bool _fin_flag {};
   public:
     //! Initialize a TCPSender
     TCPSender(const size_t capacity = TCPConfig::DEFAULT_CAPACITY,
               const uint16_t retx_timeout = TCPConfig::TIMEOUT_DFLT,
               const std::optional<WrappingInt32> fixed_isn = {});
-
+ 
     //! \name "Input" interface for the writer
     //!@{
     ByteStream &stream_in() { return _stream; }
@@ -56,6 +63,7 @@ class TCPSender {
     //! \brief create and send segments to fill as much of the window as possible
     void fill_window();
 
+    void loading_data( TCPSegment & t);
     //! \brief Notifies the TCPSender of the passage of time
     void tick(const size_t ms_since_last_tick);
     //!@}
@@ -82,6 +90,7 @@ class TCPSender {
     //!@{
 
     //! \brief absolute seqno for the next byte to be sent
+
     uint64_t next_seqno_absolute() const { return _next_seqno; }
 
     //! \brief relative seqno for the next byte to be sent

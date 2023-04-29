@@ -18,6 +18,7 @@ string TCPState::state_summary(const TCPSender &sender) {
     if (sender.stream_in().error()) {
         return TCPSenderStateSummary::ERROR;
     } else if (sender.next_seqno_absolute() == 0) {
+
         return TCPSenderStateSummary::CLOSED;
     } else if (sender.next_seqno_absolute() == sender.bytes_in_flight()) {
         return TCPSenderStateSummary::SYN_SENT;

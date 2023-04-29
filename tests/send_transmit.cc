@@ -14,7 +14,6 @@ using namespace std;
 int main() {
     try {
         auto rd = get_random_generator();
-
         {
             TCPConfig cfg;
             WrappingInt32 isn(rd());
@@ -95,8 +94,7 @@ int main() {
             test.execute(ExpectBytesInFlight{bytes_sent});
             test.execute(AckReceived{WrappingInt32{isn + 1 + uint32_t(bytes_sent)}});
             test.execute(ExpectBytesInFlight{0});
-        }
-
+        }      
         {
             TCPConfig cfg;
             WrappingInt32 isn(rd());
