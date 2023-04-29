@@ -121,7 +121,7 @@ size_t ByteStream::remaining_capacity() const {  return _capacity - _data.size()
 
 ```
 根据上述分析 来的是碎片化的字节流 而且有重复， 就相当于一个一个集合，当集合有交集的时候可以合成一个大集合
-不过我打算直接用vector<char> 来存储 因为只有开头流是一个整体就可以存入byte_stream所以维护一个已存入流的下标就可以了，另外就是区分碎片和非碎片，我选用了vector<bool> 来进行辨别（vecotr<bool> 遍历时不用引用修改）, 碎片有交集合并这件事就很简单了，因为本身数组特性就可以去重合并，其中当开头插入一个碎片时还需判断后续碎片是否已经完整，所以记录一个下标判断到不完整即可
+不过我打算直接用vector<char> 来存储 因为只有开头流是一个整体就可以存入byte_stream所以维护一个已存入流的下标就可以了，另外就是区分碎片和非碎片，我选用了vector<bool> 来进行辨别（vecotr<bool> 遍历时不用引用修改）, 碎片有交集合并这件事就很简单了，因为本身数组特性就可以去重合并，其中当开头插入一个碎片时还需判断后续碎片是否已经完整，所以记录一个下标判断到不完整即可 而且由于防止byte不能同步写入记录一个下标用于记录写入数量
 ```
 
 ###### stream_reassembler.hh
@@ -129,23 +129,22 @@ size_t ByteStream::remaining_capacity() const {  return _capacity - _data.size()
 ```c++
   private: 
     ByteStream _output;  //!< The reassembled in-order byte stream
-    size_t _capacity ;    //!< The maximum number of bytes
+    size_t _capacity ;      //!< The maximum number of bytes
     // Your code here -- add private members as necessary.
-    std::vector<char> _assembles {} ; // assembles string by index  if ok -> _output
-    std::vector<bool> _set{}; // ture or false   on  exist
+    std::vector<char> _assembles {} ; //assembles string by index  if ok -> _output
+    std::vector<bool> _set{}; // ture or false exist
     size_t _now_index {}; // assembled bytes index
-    size_t _now_assem_byteix {}; //alreday write _output index 这个和上个其实有一个就行
-    size_t _end_index ;  // eof index  边界
-    size_t _sum_bytes {};
+    size_t _now_assem_byteix {}; //alreday write _output index
+    size_t _end_index =  -1;  // eof index 
+    size_t _sum_bytes {}; // 每一个窗口写入的字节数
+    int _full_flag {}; // 当容器满了但是还eof还没到++
 ```
 
 ###### stream_reassembler.cc
 
 ```c++
-
 StreamReassembler::StreamReassembler(const size_t capacity) :
-                     _output(capacity), _capacity(capacity)
-                     , _end_index(capacity) {
+                     _output(capacity), _capacity(capacity) {
     _assembles.resize(_capacity);
     _set.resize(_capacity);
     for (auto &i : _assembles)
@@ -157,22 +156,24 @@ StreamReassembler::StreamReassembler(const size_t capacity) :
 //! \details This function accepts a substring (aka a segment) of bytes,
 //! possibly out-of-order, from the logical stream, and assembles any newly
 //! contiguous substrings and writes them into the output stream in order.
-void StreamReassembler::push_substring(const string &data, const size_t index, const bool eof) {
+void StreamReassembler::push_substring(const string &data, const size_t index, const bool eof) 
+{
+    size_t offset = _full_flag * _capacity;
     size_t end = data.size() + index;
-    //稍微优化一点，对比其他人用set， priority_queue实现，感觉性能还可以
-    size_t start = index >  _now_index ? index : _now_index;
-    if(end > _capacity) end = _capacity;
+    size_t start = index >  _now_index + offset ? index : _now_index + offset;
+    if(end  - offset > _capacity) end = _capacity + offset;
     for(size_t i = start ; i < end ; i++)
     {
-        if(_set[i] == 0)
+        size_t ci = i % (_capacity);
+        if(_set[ci] == 0)
         {
-            _set[i] = 1;
-            _assembles[i] = data[i - index];
+            _set[ci] = 1;
+            _assembles[ci] = data[i - index];
             ++_sum_bytes;
         }
-        if(_now_index == i)
+        if(_now_index == ci)
         {
-            _now_index = end;
+            _now_index =end  - offset ;
         }
     }
     while(_now_index < _capacity &&  1 == _set[_now_index])
@@ -183,14 +184,25 @@ void StreamReassembler::push_substring(const string &data, const size_t index, c
     {
         string datatmp;
         for(size_t i = _now_assem_byteix ; i < _now_index ; i++)
+        {
             datatmp += _assembles[i];
-        _now_assem_byteix = _now_index;
-        _output.write(datatmp);
+            _set[i] = 0;
+        } 
+	    size_t size = _output.write(datatmp);
+         _now_assem_byteix += size; // ever there have bug
     }
     if(1 == eof) _end_index = end;
-    if(_end_index == _now_index)
+    if(_end_index  == _now_index + offset)
     {
-        _output.end_input();//EOF标志
+        _output.end_input();
+    }
+    else if(_now_assem_byteix == _capacity)
+    {
+         _output.end_input();
+        _full_flag++;
+        _now_index = 0;
+        _sum_bytes = 0;
+        _now_assem_byteix = 0;
     }
 }
 size_t StreamReassembler::unassembled_bytes() const {
@@ -198,6 +210,106 @@ size_t StreamReassembler::unassembled_bytes() const {
 }
 
 bool StreamReassembler::empty() const { return unassembled_bytes() == 0; }
+```
+
+## LAB2
+
+  本文要求实现一个处理Tcp连接请求接收消息的 TCP Receiver（ps） 由于我上面的写法是只管理了一个窗口于是在这节疯狂打补丁形成滑动窗口 （就是一个窗口装不下的时候，先缓存一下，然后在装）
+
+###### stream_reassembler.cc 打补丁
+
+```c++
+//增加了俩个函数
+size_t StreamReassembler::residue() const //该窗口剩余容量
+{
+    return _capacity - _now_assem_byteix;
+}
+
+uint64_t  StreamReassembler::headno() const //int64真实头长度
+{
+    return _full_flag * _capacity + _now_assem_byteix;
+}
+```
+
+###### tcp_receiver.hh
+
+```c++
+// 记录一下isn 
+private:  
+	StreamReassembler _reassembler;
+    //! The maximum number of bytes we'll store.
+    size_t _capacity;
+
+    uint64_t _isn{0};
+    int32_t _start_flag {};//模拟uint64长度
+    bool _eof{};
+    int _null_offset {};//fin 和 syn 有没有同时出现
+```
+
+###### tcp_receiver.cc
+
+```c++
+//syn 和 fin 同时来就 seq+2  并且他们来都可能带数据所以先处理标志然后处理数据
+bool TCPReceiver::segment_received(const TCPSegment &seg) {
+    int ret = 0; // syn and fin can possible  come here thar at the same time
+    uint64_t index {}; // push_string index 
+    if( 1 ==  seg.header().syn)//deal syn
+    {  
+        if(1 == _start_flag) return false; 
+        _start_flag = 1;
+        _isn = seg.header().seqno.raw_value();   
+        ret++;
+         _null_offset++;
+        if(seg.length_in_sequence_space() == 1) return true; //only syn
+    }
+    else 
+    {    
+        if(0 == _start_flag ) return false;  
+        // @don`t have syn   then  deal flow push_string index
+        index =unwrap(seg.header().seqno , WrappingInt32(_isn) , _start_flag * _capacity) -1;
+       // cout<<" -- index "<<index<<endl;
+    }
+    if(1 == seg.header().fin)//deal fin  
+    {  
+        if(1 == _eof) return false;     
+         ret++;
+         _null_offset++;
+        _eof = 1;
+    }
+    else 
+    {
+        uint64_t top = (_reassembler.headno() - _reassembler.headno() % _capacity )+ _capacity;
+        uint64_t low = _reassembler.headno();
+        if(index >=  top || index + seg.length_in_sequence_space() - ret <= low)
+            return false; // not in window
+    }
+    //@ deal byte flow 
+    //@ imitate sliding window at twice puhs_string  
+    size_t redata_size  = seg.payload().size(); // virtual size 
+    size_t now_remasmbler_size = _reassembler.residue(); // reality size   
+    if(now_remasmbler_size < redata_size)//他的字节数比我虚报的空间大，分两次发
+    {
+        string data_tmp = seg.payload().copy();
+        _reassembler.push_substring(data_tmp.substr(0,now_remasmbler_size),index,0);
+        _reassembler.push_substring(data_tmp.substr(now_remasmbler_size),index + now_remasmbler_size,0);
+    }
+    else
+    {
+         _reassembler.push_substring(seg.payload().copy(), index , seg.header().fin);
+    } 
+     if(1 == _reassembler.stream_out().input_ended() ) _start_flag++;
+    return true;
+}
+
+optional<WrappingInt32> TCPReceiver::ackno() const {
+    if(_start_flag)
+        return { wrap(_reassembler.headno() + _null_offset ,WrappingInt32(_isn)) };
+    return  std::nullopt;
+ }
+
+size_t TCPReceiver::window_size() const //virtual size
+{ return _capacity - _reassembler.stream_out().buffer_size(); }
+
 
 ```
 
@@ -205,12 +317,3 @@ bool StreamReassembler::empty() const { return unassembled_bytes() == 0; }
 
 
 
-
-
-
-
-
-
-
-
->>>>>>> 2d7953ebe1acb0599821e52d7f5b02f54d829419
