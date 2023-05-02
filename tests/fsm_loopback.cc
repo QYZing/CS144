@@ -58,7 +58,7 @@ int main() {
                     test_1.execute(SendSegment{move(seg)});
                     test_1.execute(Tick(1));
                 }
-
+ 
                 // Transfer the (bare) ack segments
                 for (size_t i = 0; i < n_segments; ++i) {
                     auto seg = test_1.expect_seg(ExpectSegment{}.with_ack(true).with_payload_size(0));
