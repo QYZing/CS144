@@ -29,6 +29,7 @@ void StreamReassembler::push_substring(const string &data, const size_t index, c
 {
     size_t offset = _full_flag * _capacity;
     size_t end = data.size() + index;
+    if(1 == eof) _end_index = end;
     size_t start = index >  _now_index + offset ? index : _now_index + offset;
     if(end  - offset > _capacity) end = _capacity + offset;
     for(size_t i = start ; i < end ; i++)
@@ -49,7 +50,7 @@ void StreamReassembler::push_substring(const string &data, const size_t index, c
     {
         _now_index++;
     }
-    if(_now_assem_byteix != _now_index)
+    if(_now_assem_byteix < _now_index)//have possible bug
     {
         string datatmp;
         for(size_t i = _now_assem_byteix ; i < _now_index ; i++)
@@ -58,16 +59,15 @@ void StreamReassembler::push_substring(const string &data, const size_t index, c
             _set[i] = 0;
         } 
 	    size_t size = _output.write(datatmp);
-         _now_assem_byteix += size; // ever there have bug
+        _now_assem_byteix += size; // ever there have bug
+      //  _now_index = _now_assem_byteix;
     }
-    if(1 == eof) _end_index = end;
-    if(_end_index  == _now_index + offset)
+    if(_end_index  == _now_assem_byteix + offset)//have possible bug
     {
         _output.end_input();
     }
     else if(_now_assem_byteix == _capacity )
     {
-         _output.end_input();
         _full_flag++;
         _now_index = 0;
         _sum_bytes = 0;

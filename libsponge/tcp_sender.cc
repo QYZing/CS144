@@ -2,7 +2,6 @@
 
 #include "tcp_config.hh"
 
-#include <iostream>
 #include <random>
 // Dummy implementation of a TCP sender
 
@@ -92,13 +91,6 @@ void TCPSender::send_empty_segment()  // only emtpy seqno
     t.header().seqno = wrap(_next_seqno, _isn);
     _segments_out.push(t);
 }
-void TCPSender::send_empty_segment_tmp() {
-    TCPSegment t;
-    t.header().seqno = wrap(_next_seqno, _isn);
-    _segments_out.push(t);
-    _now_tmp_data.push(t);
-    _bytes_in_flight++;
-}
 void TCPSender::loading_data(TCPSegment &tmp) {
     if (_fin_flag)
         return;
@@ -124,7 +116,6 @@ void TCPSender::loading_data(TCPSegment &tmp) {
             if (_stream.eof() && size) {
                 t.header().fin = 1;
                 _fin_flag = 1;
-                cout << _now_tmp_data.size() << endl;
             }
         }
         _bytes_in_flight += t.length_in_sequence_space();

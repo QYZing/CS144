@@ -1,6 +1,5 @@
 #include "tcp_receiver.hh"
 
-#include <iostream>
 // Dummy implementation of a TCP receiver
 
 // For Lab 2, please replace with a real implementation that passes the
@@ -28,7 +27,15 @@ bool TCPReceiver::segment_received(const TCPSegment &seg) {
             return false;
         // @don`t have syn   then  deal flow push_string index
         index = unwrap(seg.header().seqno, WrappingInt32(_isn), _start_flag * _capacity) - _null_offset;
-        // cout<<" -- index "<<index<<endl;
+    }
+    {
+        uint64_t top = _reassembler.headno() + _capacity;
+        uint64_t low = _reassembler.headno();
+        uint64_t endindex = index + seg.payload().size();
+        if (seg.payload().size())
+            endindex--;
+        if (index >= top || endindex < low)
+            return false;  // not in window
     }
     if (1 == seg.header().fin)  // deal fin
     {
@@ -37,15 +44,6 @@ bool TCPReceiver::segment_received(const TCPSegment &seg) {
         ret++;
         _null_offset++;
         _eof = 1;
-    } else {
-        uint64_t top = _reassembler.headno() + _capacity;
-        uint64_t low = _reassembler.headno();
-        uint64_t endindex = index + seg.payload().size();
-        if (seg.payload().size())
-            endindex--;
-        if (index >= top || endindex < low)
-            return false;  // not in window
-        // cout<<"index " <<index<<" top "<<top<<" low "<<low<<endl;
     }
     //@ imitate sliding window at twice puhs_string
     size_t redata_size = seg.payload().size();            // virtual size
@@ -53,12 +51,10 @@ bool TCPReceiver::segment_received(const TCPSegment &seg) {
     if (now_remasmbler_size < redata_size) {
         string data_tmp = seg.payload().copy();
         _reassembler.push_substring(data_tmp.substr(0, now_remasmbler_size), index, 0);
-        _reassembler.push_substring(data_tmp.substr(now_remasmbler_size), index + now_remasmbler_size, 0);
+        _reassembler.push_substring(data_tmp.substr(now_remasmbler_size , redata_size), index + now_remasmbler_size, seg.header().fin);
     } else {
         _reassembler.push_substring(seg.payload().copy(), index, seg.header().fin);
     }
-    if (1 == _reassembler.stream_out().input_ended())
-        _start_flag++;
     return true;
 }
 
