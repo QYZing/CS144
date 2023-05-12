@@ -39,12 +39,9 @@ bool TCPReceiver::segment_received(const TCPSegment &seg) {
         uint64_t endindex = index + seg.payload().size();
         if (seg.payload().size())
             endindex--;
-      //  cerr<<" index "<<index<<" top "<<top <<" low "<<low<<endl;
         if (index >= top || endindex < low )
             return false;  // not in window
-       // cerr<<"上面的符合条件 "<<" index "<<index<<" top "<<top <<" low "<<low<<endl;
     }
- 
     //@ imitate sliding window at twice puhs_string
     size_t redata_size = seg.payload().size();            // virtual size
     size_t now_remasmbler_size = _reassembler.residue();  // reality size

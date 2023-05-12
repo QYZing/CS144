@@ -21,11 +21,6 @@ size_t TCPConnection::time_since_last_segment_received() const { return _time_si
 
 void TCPConnection::segment_received(const TCPSegment &seg) {
     _time_since_last_segment_received = 0;
-    if(_state==TCPState::State::CLOSE_WAIT)
-    {
-      //  cerr<<"close _wait 接收到消息 "<<seg.header().ackno<<endl;
-    }
-    //   _sender.ack_received(seg.header().ackno, seg.header().win);
     if (!_receiver.stream_out().eof() && !_receiver.segment_received(seg))
     {
         if(seg.header().ack && _state != TCPState::State::ESTABLISHED ){
@@ -52,7 +47,7 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
         send(false);
         return;
     }
-     _sender.ack_received(seg.header().ackno, seg.header().win);
+    _sender.ack_received(seg.header().ackno, seg.header().win);
     if(seg.header().rst){
         unclean_shutdown(false);
         return ;
@@ -65,11 +60,8 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
             if (_receiver.stream_out().input_ended()) 
                 _state = _state = TCPState::State::TIME_WAIT;
             return;
-        }else 
-        {
-            //_state = TCPState::State::LAST_ACK;
         }
-    } else if (_state == TCPState::State::FIN_WAIT_2 && seg.header().fin) {
+    } else if (_state == TCPState::State::FIN_WAIT_2 && _receiver.stream_out().input_ended()) {
             _state = TCPState::State::TIME_WAIT;
 
     }else if (_state == TCPState::State::LAST_ACK) {
@@ -77,23 +69,18 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
             _state = TCPState::State::CLOSED;
         return;
     } else if (_state == TCPState::State::CLOSE_WAIT && !seg.header().fin) {
-     //   _state = TCPState::State::CLOSED;
         return;
     }
     else if(_state == TCPState::State::TIME_WAIT)
     {
-        if(seg.header().fin)
-        {
-           
-        }
-        else return ;
+        if(!seg.header().fin)  return ;
     }
     else if (_state == TCPState::State::ESTABLISHED) {
         if (seg.header().fin) {
             _state = TCPState::State::CLOSE_WAIT;
         } else if (seg.payload().size() == 0) {
             if (seg.header().ackno.raw_value() <= _sender.next_seqno().raw_value() && !_sender.segments_out().size()) 
-                return;
+                 return;
         } 
     } else if (_state == TCPState::State::LISTEN) {
         if (seg.header().syn) {
