@@ -9,10 +9,8 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
-
 using namespace std;
 using State = TCPTestHarness::State;
-
 int main() {
     try {
         TCPConfig cfg{};
@@ -37,6 +35,7 @@ int main() {
         // test #2: start in CLOSING, send ack, time out
         {
             TCPTestHarness test_2 = TCPTestHarness::in_closing(cfg);
+
 
             test_2.execute(Tick(4 * cfg.rt_timeout));
             test_2.execute(ExpectOneSegment{}.with_fin(true));
@@ -146,7 +145,6 @@ int main() {
             test_5.execute(Tick(10));
             test_5.execute(ExpectState{State::CLOSED});
         }
-
         // test 6: start in ESTABLISHED, get FIN, get FIN re-tx, send FIN, get ACK, send ACK, time out
         {
             TCPTestHarness test_6 = TCPTestHarness::in_established(cfg);
