@@ -48,7 +48,14 @@ class Router {
     //! as specified by the route with the longest prefix_length that matches the
     //! datagram's destination address.
     void route_one_datagram(InternetDatagram &dgram);
-
+    struct RouteMessage
+    {
+        uint32_t route_prefix;
+        uint8_t prefix_length;
+        std::optional<Address> next_hop;
+        size_t interface_num;
+    };
+    std::vector<RouteMessage> _rt_mes {};
   public:
     //! Add an interface to the router
     //! \param[in] interface an already-constructed network interface
@@ -56,7 +63,7 @@ class Router {
     size_t add_interface(AsyncNetworkInterface &&interface) {
         _interfaces.push_back(std::move(interface));
         return _interfaces.size() - 1;
-    }
+    } 
 
     //! Access an interface by index
     AsyncNetworkInterface &interface(const size_t N) { return _interfaces.at(N); }

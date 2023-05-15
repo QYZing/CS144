@@ -62,21 +62,16 @@ void NetworkInterface::send_datagram(const InternetDatagram &dgram, const Addres
 
 //! \param[in] frame the incoming Ethernet frame
 optional<InternetDatagram> NetworkInterface::recv_frame(const EthernetFrame &frame) {
-    cerr << (frame.header().dst == ETHERNET_BROADCAST) <<"   "<<(frame.header().dst == _ethernet_address) <<"\n";
     if(frame.header().dst != _ethernet_address && frame.header().dst != ETHERNET_BROADCAST )
         return std::nullopt;
     if(frame.header().type == EthernetHeader::TYPE_IPv4)
     {
-        cerr <<" im come here ipv4 "<<endl;
         InternetDatagram data;
         data.parse(frame.payload());
-        //if(data.header().dst != _ip_address.ipv4_numeric())
-            //return std::nullopt;
         return data;
     }
     else if(frame.header().type == EthernetHeader::TYPE_ARP )
     {
-        cerr <<" im come here arp "<<endl;
         ARPMessage mes;
         mes.parse(frame.payload());
         if(mes.target_ip_address != _ip_address.ipv4_numeric()) return std::nullopt;
