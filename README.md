@@ -4,6 +4,8 @@
 
 由于再写时官网还没有更新完文档于是用了一个大佬搭的备份19年版本[【计算机网络】Stanford CS144 Lab Assignments 学习笔记 - 康宇PL - 博客园 (cnblogs.com)](https://www.cnblogs.com/kangyupl/p/stanford_cs144_labs.html)
 
+我是在看完中科大的网络就直接写这个了，搭配 计算机网络自顶向下 TCP/IP 详解 卷1，可以适度完成
+
 ###### 前言：
 
 本lab实验环境在centos g++ 8 实现 cmake版本12
@@ -590,17 +592,241 @@ tshark -i tun144 后面有选项可以输出到文件什么的看--help就行
 
 ![1683896910636](assets/1683896910636.png)
 
+## lab5 
 
+本lab还是比较简单的，花费了一会改改bug就写完了，主要是明白各个接口的定义，实现一个arp，根据ip查看mac地址，并且缓存下缓存也有时效30秒讲义上，而且如果arp广播发送5秒没响应下次还得发
 
+###### network_interface.hh
 
+```c++
+ private: 
+    //! Ethernet (known as hardware, network-access-layer, or link-layer) address of the interface
+    struct MemoryEthAddr {
+        EthernetAddress _mac;
+        std::size_t _ttl;
+    };
+    std::unordered_map<uint32_t, MemoryEthAddr> _ip_mac {};
+    size_t _now_time {};
+    std::unordered_map<uint32_t , size_t> _last_time {}; 
+    std::unordered_map<uint32_t,std::vector<EthernetFrame>> _frame_wait{};
 
+    EthernetAddress _ethernet_address {};
+    //! IP (known as internet-layer or network-layer) address of the interface
+    Address _ip_address;
 
+    //! outbound queue of Ethernet frames that the NetworkInterface wants sent
+    std::queue<EthernetFrame> _frames_out{};
 
+```
 
+###### network_interface.cc
 
+```c++
+NetworkInterface::NetworkInterface(const EthernetAddress &ethernet_address, const Address &ip_address)
+    : _ethernet_address(ethernet_address), _ip_address(ip_address) {
+    cerr << "DEBUG: Network interface has Ethernet address " << to_string(_ethernet_address) << " and IP address "
+         << ip_address.ip() << "\n";
+}
 
+//! \param[in] dgram the IPv4 datagram to be sent
+//! \param[in] next_hop the IP address of the interface to send it to (typically a router or default gateway, but may also be another host if directly connected to the same network as the destination)
+//! (Note: the Address type can be converted to a uint32_t (raw 32-bit IP address) with the Address::ipv4_numeric() method.)
+void NetworkInterface::send_datagram(const InternetDatagram &dgram, const Address &next_hop) {
+    // convert IP address of next hop to raw 32-bit representation (used in ARP header)
+    const uint32_t next_hop_ip = next_hop.ipv4_numeric();
+    EthernetFrame frame;
+    frame.payload().append(dgram.serialize());
+    frame.header().src = _ethernet_address;
+    frame.header().type = EthernetHeader::TYPE_IPv4;
 
+    if(_ip_mac.count(next_hop_ip) == 0 || _ip_mac[next_hop_ip]._ttl  +  30000 <= _now_time){
+        _frame_wait[next_hop_ip].push_back(frame);
+        if(_frame_wait[next_hop_ip].size() > 1 && _last_time[next_hop_ip] + 5000 >= _now_time) return ;
+        EthernetFrame _look_for;
+        _look_for.header().src = _ethernet_address;
+        _look_for.header().type = EthernetHeader::TYPE_ARP;
+        _look_for.header().dst = ETHERNET_BROADCAST;
+        ARPMessage mes;
+        mes.opcode = ARPMessage::OPCODE_REQUEST;
+        mes.sender_ethernet_address = _ethernet_address;
+        mes.sender_ip_address = _ip_address.ipv4_numeric();
+        mes.target_ip_address =  next_hop_ip ;
 
+        _look_for.payload().append(mes.serialize());
+        _last_time[next_hop_ip] = _now_time;
+        _frames_out.push(move(_look_for));
+
+    }else {
+        frame.header().dst = _ip_mac[next_hop_ip]._mac;
+        _frames_out.push(move(frame));
+    }
+}
+
+//! \param[in] frame the incoming Ethernet frame
+optional<InternetDatagram> NetworkInterface::recv_frame(const EthernetFrame &frame) {
+    if(frame.header().dst != _ethernet_address && frame.header().dst != ETHERNET_BROADCAST )
+        return std::nullopt;
+    if(frame.header().type == EthernetHeader::TYPE_IPv4)
+    {
+        InternetDatagram data;
+        data.parse(frame.payload());
+        return data;
+    }
+    else if(frame.header().type == EthernetHeader::TYPE_ARP )
+    {
+        ARPMessage mes;
+        mes.parse(frame.payload());
+        if(mes.target_ip_address != _ip_address.ipv4_numeric()) return std::nullopt;
+        MemoryEthAddr m_eth;
+        m_eth._mac = mes.sender_ethernet_address;
+        m_eth._ttl = _now_time;
+        _ip_mac[mes.sender_ip_address] = m_eth;
+        if(frame.header().dst == ETHERNET_BROADCAST  )
+        {
+            ARPMessage send_mes;
+            send_mes.opcode = ARPMessage::OPCODE_REPLY;
+            send_mes.sender_ethernet_address = _ethernet_address;
+            send_mes.sender_ip_address = _ip_address.ipv4_numeric();
+            send_mes.target_ip_address =  mes.sender_ip_address; 
+            send_mes.target_ethernet_address = mes.sender_ethernet_address;
+            EthernetFrame frm;
+            frm.payload().append(send_mes.serialize());
+            frm.header().src = _ethernet_address;
+            frm.header().dst = mes.sender_ethernet_address;
+            frm.header().type = EthernetHeader::TYPE_ARP;
+            _frames_out.push(move(frm));
+        }
+        if(_frame_wait.count(mes.sender_ip_address) != 0)
+        {
+            for(EthernetFrame &frm : _frame_wait[mes.sender_ip_address] )
+            {
+                frm.header().dst = frame.header().src;
+                _frames_out.push(frm);
+            }
+            _frame_wait[mes.sender_ip_address].clear();
+        }
+    }
+    return {};
+}
+
+//! \param[in] ms_since_last_tick the number of milliseconds since the last call to this method
+void NetworkInterface::tick(const size_t ms_since_last_tick) { 
+    _now_time += ms_since_last_tick;
+}
+```
+
+## lab6
+
+这个lab也挺简单，lab5和lab6一共没花几个小时就搞定了，就是根据包的目标ip转发到指定网卡接口上
+
+###### router.hh
+
+```c++
+  std::vector<AsyncNetworkInterface> _interfaces{};
+
+    //! Send a single datagram from the appropriate outbound interface to the next hop,
+    //! as specified by the route with the longest prefix_length that matches the
+    //! datagram's destination address.
+    void route_one_datagram(InternetDatagram &dgram);
+    struct RouteMessage
+    {
+        uint32_t route_prefix;
+        uint8_t prefix_length;
+        std::optional<Address> next_hop;
+        size_t interface_num;
+    };
+    std::vector<RouteMessage> _rt_mes {};
+```
+
+###### router.cc
+
+```c++
+#include "router.hh"
+
+#include <iostream>
+#include <bitset>
+using namespace std;
+
+// Dummy implementation of an IP router
+
+// Given an incoming Internet datagram, the router decides
+// (1) which interface to send it out on, and
+// (2) what next hop address to send it to.
+
+// For Lab 6, please replace with a real implementation that passes the
+// automated checks run by `make check_lab6`.
+
+// You will need to add private members to the class declaration in `router.hh`
+
+template <typename... Targs>
+void DUMMY_CODE(Targs &&... /* unused */) {}
+
+//! \param[in] route_prefix The "up-to-32-bit" IPv4 address prefix to match the datagram's destination address against
+//! \param[in] prefix_length For this route to be applicable, how many high-order (most-significant) bits of the route_prefix will need to match the corresponding bits of the datagram's destination address?
+//! \param[in] next_hop The IP address of the next hop. Will be empty if the network is directly attached to the router (in which case, the next hop address should be the datagram's final destination).
+//! \param[in] interface_num The index of the interface to send the datagram out on.
+void Router::add_route(const uint32_t route_prefix,
+                       const uint8_t prefix_length,
+                       const optional<Address> next_hop,
+                       const size_t interface_num) {
+    cerr << "DEBUG: adding route " << Address::from_ipv4_numeric(route_prefix).ip() << "/" << int(prefix_length)
+         << " => " << (next_hop.has_value() ? next_hop->ip() : "(direct)") << " on interface " << interface_num << "\n";
+    _rt_mes.push_back({route_prefix,prefix_length , next_hop ,interface_num });
+    // Your code here.
+}
+
+//! \param[in] dgram The datagram to be routed
+void Router::route_one_datagram(InternetDatagram &dgram) {
+    string ips = bitset<32>(dgram.header().dst).to_string();
+    uint8_t max_length = 0;
+    size_t index = 0;
+    int flag = true;
+    for(size_t p =0 ;p < _rt_mes.size() ; p++){
+        auto & i = _rt_mes[p];
+        string t =bitset<32>(i.route_prefix).to_string();
+        if(t.substr(0 , i.prefix_length) == ips.substr(0 , i.prefix_length))
+        {
+            if(i.prefix_length > max_length || flag)
+            {
+                max_length = i.prefix_length;
+                index = p;
+                flag = false;
+            }
+        }
+    }
+    if(flag) return ;
+    if(dgram.header().ttl <= 1)
+        return ;
+    dgram.header().ttl--;
+    if(_rt_mes[index].next_hop.has_value())
+    {
+        interface(_rt_mes[index].interface_num).send_datagram(dgram , _rt_mes[index].next_hop.value());
+    }
+    else
+    {
+        interface(_rt_mes[index].interface_num).send_datagram(dgram , Address::from_ipv4_numeric(dgram.header().dst));
+    }
+}
+
+void Router::route() {
+    // Go through all the interfaces, and route every incoming datagram to its proper outgoing interface.
+    for (auto &interface : _interfaces) {
+        auto &queue = interface.datagrams_out();
+        while (not queue.empty()) {
+            route_one_datagram(queue.front());
+            queue.pop();
+        }
+    }
+}
+```
+
+完结截图
+
+![1684159752455](/assets/1684159752455.png)
+
+## summary:
+
+至此 cs144 lab就完结了，其他的lab每个几乎就是一天就完成了，只有lab4来来回回调试了10天左右，加起来完成这个lab一个花费了半个月，lab4找bug一百多个案例真是忘不了，各种goole，baidu，最后发现防火墙挡住了一大半，哭死。不过这个lab真的让我学会很多东西，也稍微学了一些 git shell 抓包的知识，还有就是英语，每次看英语文档看大半天然后再看别人给出的翻译，不过话说，英语阅读有点长进了，哈哈，下一个lab就是数据库了，有了这些完美的课程，总算我感觉我的大学cs生涯才是perfect
 
 
 
