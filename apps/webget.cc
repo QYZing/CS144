@@ -1,5 +1,6 @@
-#include "socket.hh"
+#include "tcp_sponge_socket.hh"
 #include "util.hh"
+#include "socket.hh"
 
 #include <cstdlib>
 #include <iostream>
@@ -27,6 +28,7 @@ void get_URL(const string &host, const string &path) {
     {
         cout<<sock->read();
     }
+  //  sock->wait_until_closed();
     cerr << "Function called: get_URL(" << host << ", " << path << ").\n";
     cerr << "Warning: get_URL() has not been implemented yet.\n";
 }
